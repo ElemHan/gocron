@@ -347,11 +347,13 @@ type monthlyJobDefinition struct {
 	interval       uint
 	daysOfTheMonth DaysOfTheMonth
 	atTimes        AtTimes
+	delay          time.Duration
 }
 
 func (m monthlyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	var ms monthlyJob
 	ms.interval = m.interval
+	ms.delay = m.delay
 
 	if m.daysOfTheMonth == nil {
 		return nil, ErrMonthlyJobDaysNil
@@ -465,11 +467,12 @@ func NewAtTimes(atTime AtTime, atTimes ...AtTime) AtTimes {
 // Carefully consider your configuration!
 //   - For example: an interval of 2 months on the 31st of each month, starting 12/31
 //     would skip Feb, April, June, and next run would be in August.
-func MonthlyJob(interval uint, daysOfTheMonth DaysOfTheMonth, atTimes AtTimes) JobDefinition {
+func MonthlyJob(interval uint, daysOfTheMonth DaysOfTheMonth, atTimes AtTimes, delay time.Duration) JobDefinition {
 	return monthlyJobDefinition{
 		interval:       interval,
 		daysOfTheMonth: daysOfTheMonth,
 		atTimes:        atTimes,
+		delay:          delay,
 	}
 }
 
@@ -806,6 +809,7 @@ type monthlyJob struct {
 	days        []int
 	daysFromEnd []int
 	atTimes     []time.Time
+	delay       time.Duration
 }
 
 func (m monthlyJob) Next(lastRun time.Time) time.Time {
@@ -834,7 +838,7 @@ func (m monthlyJob) Next(lastRun time.Time) time.Time {
 		from = from.AddDate(0, int(m.interval), 0)
 	}
 
-	return next
+	return next.Add(m.delay)
 }
 
 func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass bool) time.Time {
