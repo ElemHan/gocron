@@ -302,7 +302,7 @@ func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
 		}
 	}
 
-	next := j.next(j.lastRun)
+	next := j.Next(j.lastRun)
 	if next.IsZero() {
 		// the job's next function will return zero for OneTime jobs.
 		// since they are one time only, they do not need rescheduling.
@@ -315,7 +315,7 @@ func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
 		// in those cases, we want to increment to the next run in the future
 		// and schedule the job for that time.
 		for next.Before(s.now()) {
-			next = j.next(next)
+			next = j.Next(next)
 		}
 	}
 	j.nextRun = next
@@ -360,7 +360,7 @@ func (s *scheduler) selectNewJob(j internalJob) {
 			}
 		} else {
 			if next.IsZero() {
-				next = j.next(s.now())
+				next = j.Next(s.now())
 			}
 
 			id := j.id
@@ -410,7 +410,7 @@ func (s *scheduler) selectStart() {
 			}
 		} else {
 			if next.IsZero() {
-				next = j.next(s.now())
+				next = j.Next(s.now())
 			}
 
 			jobID := id
