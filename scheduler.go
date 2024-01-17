@@ -302,7 +302,8 @@ func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
 		}
 	}
 
-	next := j.Next(j.lastRun)
+	// compute the next time with delay time, the base time should be subtraction delay time
+	next := j.Next(j.lastRun.Add(-j.delay))
 	if next.IsZero() {
 		// the job's next function will return zero for OneTime jobs.
 		// since they are one time only, they do not need rescheduling.

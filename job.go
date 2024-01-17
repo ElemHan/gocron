@@ -25,6 +25,7 @@ type internalJob struct {
 	tags   []string
 	JobSchedule
 	lastRun, nextRun   time.Time
+	delay              time.Duration
 	function           any
 	parameters         []any
 	timer              clockwork.Timer
@@ -99,6 +100,7 @@ var _ JobDefinition = (*cronJobDefinition)(nil)
 type cronJobDefinition struct {
 	crontab     string
 	withSeconds bool
+	delay       time.Duration
 }
 
 func (c cronJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
@@ -126,7 +128,7 @@ func (c cronJobDefinition) InitSchedule(location *time.Location) (JobSchedule, e
 		return nil, errors.Join(ErrCronJobParse, err)
 	}
 
-	return &cronJob{cronSchedule: cronSchedule}, nil
+	return &cronJob{cronSchedule: cronSchedule, delay: c.delay}, nil
 }
 
 func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error {
@@ -135,6 +137,7 @@ func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error 
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = c.delay
 	return nil
 }
 
@@ -151,14 +154,23 @@ func CronJob(crontab string, withSeconds bool) JobDefinition {
 	}
 }
 
+func CronWithDelayJob(crontab string, withSeconds bool, delay time.Duration) JobDefinition {
+	return cronJobDefinition{
+		crontab:     crontab,
+		withSeconds: withSeconds,
+		delay:       delay,
+	}
+}
+
 var _ JobDefinition = (*durationJobDefinition)(nil)
 
 type durationJobDefinition struct {
 	duration time.Duration
+	delay    time.Duration
 }
 
 func (d durationJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
-	return &durationJob{duration: d.duration}, nil
+	return &durationJob{duration: d.duration, delay: d.delay}, nil
 }
 
 func (d durationJobDefinition) setup(j *internalJob, location *time.Location) error {
@@ -167,6 +179,7 @@ func (d durationJobDefinition) setup(j *internalJob, location *time.Location) er
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = d.delay
 	return nil
 }
 
@@ -178,10 +191,18 @@ func DurationJob(duration time.Duration) JobDefinition {
 	}
 }
 
+func DurationWithDelayJob(duration time.Duration, delay time.Duration) JobDefinition {
+	return durationJobDefinition{
+		duration: duration,
+		delay:    delay,
+	}
+}
+
 var _ JobDefinition = (*durationRandomJobDefinition)(nil)
 
 type durationRandomJobDefinition struct {
 	min, max time.Duration
+	delay    time.Duration
 }
 
 func (d durationRandomJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
@@ -190,9 +211,10 @@ func (d durationRandomJobDefinition) InitSchedule(_ *time.Location) (JobSchedule
 	}
 
 	return &durationRandomJob{
-		min:  d.min,
-		max:  d.max,
-		rand: rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+		min:   d.min,
+		max:   d.max,
+		rand:  rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+		delay: d.delay,
 	}, nil
 }
 
@@ -202,6 +224,7 @@ func (d durationRandomJobDefinition) setup(j *internalJob, location *time.Locati
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = d.delay
 	return nil
 }
 
@@ -235,11 +258,20 @@ func DailyJob(interval uint, atTimes AtTimes) JobDefinition {
 	}
 }
 
+func DailyWithDelayJob(interval uint, atTimes AtTimes, delay time.Duration) JobDefinition {
+	return dailyJobDefinition{
+		interval: interval,
+		atTimes:  atTimes,
+		delay:    delay,
+	}
+}
+
 var _ JobDefinition = (*dailyJobDefinition)(nil)
 
 type dailyJobDefinition struct {
 	interval uint
 	atTimes  AtTimes
+	delay    time.Duration
 }
 
 func (d dailyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
@@ -258,6 +290,7 @@ func (d dailyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, 
 	return dailyJob{
 		interval: d.interval,
 		atTimes:  atTimesDate,
+		delay:    d.delay,
 	}, nil
 }
 
@@ -267,6 +300,7 @@ func (d dailyJobDefinition) setup(j *internalJob, location *time.Location) error
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = d.delay
 	return nil
 }
 
@@ -276,11 +310,13 @@ type weeklyJobDefinition struct {
 	interval      uint
 	daysOfTheWeek Weekdays
 	atTimes       AtTimes
+	delay         time.Duration
 }
 
 func (w weeklyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	var ws weeklyJob
 	ws.interval = w.interval
+	ws.delay = w.delay
 
 	if w.daysOfTheWeek == nil {
 		return nil, ErrWeeklyJobDaysOfTheWeekNil
@@ -312,6 +348,7 @@ func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location) erro
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = w.delay
 	return nil
 }
 
@@ -338,6 +375,15 @@ func WeeklyJob(interval uint, daysOfTheWeek Weekdays, atTimes AtTimes) JobDefini
 		interval:      interval,
 		daysOfTheWeek: daysOfTheWeek,
 		atTimes:       atTimes,
+	}
+}
+
+func WeeklyWithDelayJob(interval uint, daysOfTheWeek Weekdays, atTimes AtTimes, delay time.Duration) JobDefinition {
+	return weeklyJobDefinition{
+		interval:      interval,
+		daysOfTheWeek: daysOfTheWeek,
+		atTimes:       atTimes,
+		delay:         delay,
 	}
 }
 
@@ -399,6 +445,7 @@ func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location) err
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = m.delay
 	return nil
 }
 
@@ -467,7 +514,15 @@ func NewAtTimes(atTime AtTime, atTimes ...AtTime) AtTimes {
 // Carefully consider your configuration!
 //   - For example: an interval of 2 months on the 31st of each month, starting 12/31
 //     would skip Feb, April, June, and next run would be in August.
-func MonthlyJob(interval uint, daysOfTheMonth DaysOfTheMonth, atTimes AtTimes, delay time.Duration) JobDefinition {
+func MonthlyJob(interval uint, daysOfTheMonth DaysOfTheMonth, atTimes AtTimes) JobDefinition {
+	return monthlyJobDefinition{
+		interval:       interval,
+		daysOfTheMonth: daysOfTheMonth,
+		atTimes:        atTimes,
+	}
+}
+
+func MonthlyWithDelayJob(interval uint, daysOfTheMonth DaysOfTheMonth, atTimes AtTimes, delay time.Duration) JobDefinition {
 	return monthlyJobDefinition{
 		interval:       interval,
 		daysOfTheMonth: daysOfTheMonth,
@@ -480,10 +535,11 @@ var _ JobDefinition = (*oneTimeJobDefinition)(nil)
 
 type oneTimeJobDefinition struct {
 	startAt OneTimeJobStartAtOption
+	delay   time.Duration
 }
 
 func (o oneTimeJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
-	return oneTimeJob{}, nil
+	return oneTimeJob{o.delay}, nil
 }
 
 func (o oneTimeJobDefinition) setup(j *internalJob, location *time.Location) error {
@@ -492,6 +548,7 @@ func (o oneTimeJobDefinition) setup(j *internalJob, location *time.Location) err
 		return err
 	}
 	j.JobSchedule = schedule
+	j.delay = o.delay
 	return o.startAt(j)
 }
 
@@ -687,20 +744,22 @@ var _ JobSchedule = (*cronJob)(nil)
 
 type cronJob struct {
 	cronSchedule cron.Schedule
+	delay        time.Duration
 }
 
 func (j *cronJob) Next(lastRun time.Time) time.Time {
-	return j.cronSchedule.Next(lastRun)
+	return j.cronSchedule.Next(lastRun).Add(j.delay)
 }
 
 var _ JobSchedule = (*durationJob)(nil)
 
 type durationJob struct {
 	duration time.Duration
+	delay    time.Duration
 }
 
 func (j *durationJob) Next(lastRun time.Time) time.Time {
-	return lastRun.Add(j.duration)
+	return lastRun.Add(j.duration).Add(j.delay)
 }
 
 var _ JobSchedule = (*durationRandomJob)(nil)
@@ -708,11 +767,12 @@ var _ JobSchedule = (*durationRandomJob)(nil)
 type durationRandomJob struct {
 	min, max time.Duration
 	rand     *rand.Rand
+	delay    time.Duration
 }
 
 func (j *durationRandomJob) Next(lastRun time.Time) time.Time {
 	r := j.rand.Int63n(int64(j.max - j.min))
-	return lastRun.Add(j.min + time.Duration(r))
+	return lastRun.Add(j.min + time.Duration(r)).Add(j.delay)
 }
 
 var _ JobSchedule = (*dailyJob)(nil)
@@ -720,18 +780,19 @@ var _ JobSchedule = (*dailyJob)(nil)
 type dailyJob struct {
 	interval uint
 	atTimes  []time.Time
+	delay    time.Duration
 }
 
 func (d dailyJob) Next(lastRun time.Time) time.Time {
 	firstPass := true
 	next := d.nextDay(lastRun, firstPass)
 	if !next.IsZero() {
-		return next
+		return next.Add(d.delay)
 	}
 	firstPass = false
 
 	startNextDay := time.Date(lastRun.Year(), lastRun.Month(), lastRun.Day()+int(d.interval), 0, 0, 0, lastRun.Nanosecond(), lastRun.Location())
-	return d.nextDay(startNextDay, firstPass)
+	return d.nextDay(startNextDay, firstPass).Add(d.delay)
 }
 
 func (d dailyJob) nextDay(lastRun time.Time, firstPass bool) time.Time {
@@ -760,19 +821,20 @@ type weeklyJob struct {
 	interval   uint
 	daysOfWeek []time.Weekday
 	atTimes    []time.Time
+	delay      time.Duration
 }
 
 func (w weeklyJob) Next(lastRun time.Time) time.Time {
 	firstPass := true
 	next := w.nextWeekDayAtTime(lastRun, firstPass)
 	if !next.IsZero() {
-		return next
+		return next.Add(w.delay)
 	}
 	firstPass = false
 
 	startOfTheNextIntervalWeek := (lastRun.Day() - int(lastRun.Weekday())) + int(w.interval*7)
 	from := time.Date(lastRun.Year(), lastRun.Month(), startOfTheNextIntervalWeek, 0, 0, 0, 0, lastRun.Location())
-	return w.nextWeekDayAtTime(from, firstPass)
+	return w.nextWeekDayAtTime(from, firstPass).Add(w.delay)
 }
 
 func (w weeklyJob) nextWeekDayAtTime(lastRun time.Time, firstPass bool) time.Time {
@@ -828,7 +890,7 @@ func (m monthlyJob) Next(lastRun time.Time) time.Time {
 	firstPass := true
 	next := m.nextMonthDayAtTime(lastRun, daysList, firstPass)
 	if !next.IsZero() {
-		return next
+		return next.Add(m.delay)
 	}
 	firstPass = false
 
@@ -875,10 +937,12 @@ func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass 
 
 var _ JobSchedule = (*oneTimeJob)(nil)
 
-type oneTimeJob struct{}
+type oneTimeJob struct {
+	delay time.Duration
+}
 
 func (o oneTimeJob) Next(_ time.Time) time.Time {
-	return time.Time{}
+	return time.Time{}.Add(o.delay)
 }
 
 // -----------------------------------------------
