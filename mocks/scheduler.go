@@ -7,7 +7,7 @@ package gocronmocks
 import (
 	reflect "reflect"
 
-	gocron "github.com/go-co-op/gocron/v2"
+	gocron "github.com/elemhan/gocron/v2"
 	gomock "github.com/golang/mock/gomock"
 	uuid "github.com/google/uuid"
 )

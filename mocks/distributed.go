@@ -12,7 +12,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gocron "github.com/go-co-op/gocron/v2"
+	gocron "github.com/elemhan/gocron/v2"
 	gomock "go.uber.org/mock/gomock"
 )
 
