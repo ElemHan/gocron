@@ -33,7 +33,7 @@ func TestDurationJob_next(t *testing.T) {
 	for _, duration := range tests {
 		t.Run(duration.String(), func(t *testing.T) {
 			d := durationJob{duration: duration}
-			next := d.next(lastRun)
+			next := d.Next(lastRun)
 			expected := lastRun.Add(duration)
 
 			assert.Equal(t, expected, next)
@@ -91,7 +91,7 @@ func TestDailyJob_next(t *testing.T) {
 				atTimes:  tt.atTimes,
 			}
 
-			next := d.next(tt.lastRun)
+			next := d.Next(tt.lastRun)
 			assert.Equal(t, tt.expectedNextRun, next)
 			assert.Equal(t, tt.expectedDurationToNextRun, next.Sub(tt.lastRun))
 		})
@@ -140,7 +140,7 @@ func TestWeeklyJob_next(t *testing.T) {
 				atTimes:    tt.atTimes,
 			}
 
-			next := w.next(tt.lastRun)
+			next := w.Next(tt.lastRun)
 			assert.Equal(t, tt.expectedNextRun, next)
 			assert.Equal(t, tt.expectedDurationToNextRun, next.Sub(tt.lastRun))
 		})
@@ -268,7 +268,7 @@ func TestMonthlyJob_next(t *testing.T) {
 				atTimes:     tt.atTimes,
 			}
 
-			next := m.next(tt.lastRun)
+			next := m.Next(tt.lastRun)
 			assert.Equal(t, tt.expectedNextRun, next)
 			assert.Equal(t, tt.expectedDurationToNextRun, next.Sub(tt.lastRun))
 		})
@@ -311,7 +311,7 @@ func TestDurationRandomJob_next(t *testing.T) {
 			}
 
 			for i := 0; i < 100; i++ {
-				next := rj.next(tt.lastRun)
+				next := rj.Next(tt.lastRun)
 				assert.GreaterOrEqual(t, next, tt.expectedMin)
 				assert.LessOrEqual(t, next, tt.expectedMax)
 			}
@@ -321,7 +321,7 @@ func TestDurationRandomJob_next(t *testing.T) {
 
 func TestOneTimeJob_next(t *testing.T) {
 	otj := oneTimeJob{}
-	assert.Zero(t, otj.next(time.Time{}))
+	assert.Zero(t, otj.Next(time.Time{}))
 }
 
 func TestJob_RunNow_Error(t *testing.T) {

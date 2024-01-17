@@ -23,7 +23,7 @@ type internalJob struct {
 	id     uuid.UUID
 	name   string
 	tags   []string
-	jobSchedule
+	JobSchedule
 	lastRun, nextRun   time.Time
 	function           any
 	parameters         []any
@@ -89,6 +89,8 @@ type limitRunsTo struct {
 // JobDefinition defines the interface that must be
 // implemented to create a job from the definition.
 type JobDefinition interface {
+	InitSchedule(location *time.Location) (JobSchedule, error)
+
 	setup(*internalJob, *time.Location) error
 }
 
@@ -99,7 +101,7 @@ type cronJobDefinition struct {
 	withSeconds bool
 }
 
-func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (c cronJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	var withLocation string
 	if strings.HasPrefix(c.crontab, "TZ=") || strings.HasPrefix(c.crontab, "CRON_TZ=") {
 		withLocation = c.crontab
@@ -121,10 +123,18 @@ func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error 
 		cronSchedule, err = cron.ParseStandard(withLocation)
 	}
 	if err != nil {
-		return errors.Join(ErrCronJobParse, err)
+		return nil, errors.Join(ErrCronJobParse, err)
 	}
 
-	j.jobSchedule = &cronJob{cronSchedule: cronSchedule}
+	return &cronJob{cronSchedule: cronSchedule}, nil
+}
+
+func (c cronJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := c.InitSchedule(location)
+	if err != nil {
+		return err
+	}
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -147,8 +157,16 @@ type durationJobDefinition struct {
 	duration time.Duration
 }
 
-func (d durationJobDefinition) setup(j *internalJob, _ *time.Location) error {
-	j.jobSchedule = &durationJob{duration: d.duration}
+func (d durationJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
+	return &durationJob{duration: d.duration}, nil
+}
+
+func (d durationJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := d.InitSchedule(location)
+	if err != nil {
+		return err
+	}
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -166,16 +184,24 @@ type durationRandomJobDefinition struct {
 	min, max time.Duration
 }
 
-func (d durationRandomJobDefinition) setup(j *internalJob, _ *time.Location) error {
+func (d durationRandomJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
 	if d.min >= d.max {
-		return ErrDurationRandomJobMinMax
+		return nil, ErrDurationRandomJobMinMax
 	}
 
-	j.jobSchedule = &durationRandomJob{
+	return &durationRandomJob{
 		min:  d.min,
 		max:  d.max,
 		rand: rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+	}, nil
+}
+
+func (d durationRandomJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := d.InitSchedule(location)
+	if err != nil {
+		return err
 	}
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -216,24 +242,31 @@ type dailyJobDefinition struct {
 	atTimes  AtTimes
 }
 
-func (d dailyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (d dailyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	atTimesDate, err := convertAtTimesToDateTime(d.atTimes, location)
 	switch {
 	case errors.Is(err, errAtTimesNil):
-		return ErrDailyJobAtTimesNil
+		return nil, ErrDailyJobAtTimesNil
 	case errors.Is(err, errAtTimeNil):
-		return ErrDailyJobAtTimeNil
+		return nil, ErrDailyJobAtTimeNil
 	case errors.Is(err, errAtTimeHours):
-		return ErrDailyJobHours
+		return nil, ErrDailyJobHours
 	case errors.Is(err, errAtTimeMinSec):
-		return ErrDailyJobMinutesSeconds
+		return nil, ErrDailyJobMinutesSeconds
 	}
 
-	ds := dailyJob{
+	return dailyJob{
 		interval: d.interval,
 		atTimes:  atTimesDate,
+	}, nil
+}
+
+func (d dailyJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := d.InitSchedule(location)
+	if err != nil {
+		return err
 	}
-	j.jobSchedule = ds
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -245,12 +278,12 @@ type weeklyJobDefinition struct {
 	atTimes       AtTimes
 }
 
-func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (w weeklyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	var ws weeklyJob
 	ws.interval = w.interval
 
 	if w.daysOfTheWeek == nil {
-		return ErrWeeklyJobDaysOfTheWeekNil
+		return nil, ErrWeeklyJobDaysOfTheWeekNil
 	}
 
 	daysOfTheWeek := w.daysOfTheWeek()
@@ -261,17 +294,24 @@ func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location) erro
 	atTimesDate, err := convertAtTimesToDateTime(w.atTimes, location)
 	switch {
 	case errors.Is(err, errAtTimesNil):
-		return ErrWeeklyJobAtTimesNil
+		return nil, ErrWeeklyJobAtTimesNil
 	case errors.Is(err, errAtTimeNil):
-		return ErrWeeklyJobAtTimeNil
+		return nil, ErrWeeklyJobAtTimeNil
 	case errors.Is(err, errAtTimeHours):
-		return ErrWeeklyJobHours
+		return nil, ErrWeeklyJobHours
 	case errors.Is(err, errAtTimeMinSec):
-		return ErrWeeklyJobMinutesSeconds
+		return nil, ErrWeeklyJobMinutesSeconds
 	}
 	ws.atTimes = atTimesDate
+	return ws, nil
+}
 
-	j.jobSchedule = ws
+func (w weeklyJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := w.InitSchedule(location)
+	if err != nil {
+		return err
+	}
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -309,18 +349,18 @@ type monthlyJobDefinition struct {
 	atTimes        AtTimes
 }
 
-func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location) error {
+func (m monthlyJobDefinition) InitSchedule(location *time.Location) (JobSchedule, error) {
 	var ms monthlyJob
 	ms.interval = m.interval
 
 	if m.daysOfTheMonth == nil {
-		return ErrMonthlyJobDaysNil
+		return nil, ErrMonthlyJobDaysNil
 	}
 
 	var daysStart, daysEnd []int
 	for _, day := range m.daysOfTheMonth() {
 		if day > 31 || day == 0 || day < -31 {
-			return ErrMonthlyJobDays
+			return nil, ErrMonthlyJobDays
 		}
 		if day > 0 {
 			daysStart = append(daysStart, day)
@@ -339,17 +379,24 @@ func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location) err
 	atTimesDate, err := convertAtTimesToDateTime(m.atTimes, location)
 	switch {
 	case errors.Is(err, errAtTimesNil):
-		return ErrMonthlyJobAtTimesNil
+		return nil, ErrMonthlyJobAtTimesNil
 	case errors.Is(err, errAtTimeNil):
-		return ErrMonthlyJobAtTimeNil
+		return nil, ErrMonthlyJobAtTimeNil
 	case errors.Is(err, errAtTimeHours):
-		return ErrMonthlyJobHours
+		return nil, ErrMonthlyJobHours
 	case errors.Is(err, errAtTimeMinSec):
-		return ErrMonthlyJobMinutesSeconds
+		return nil, ErrMonthlyJobMinutesSeconds
 	}
 	ms.atTimes = atTimesDate
+	return ms, nil
+}
 
-	j.jobSchedule = ms
+func (m monthlyJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := m.InitSchedule(location)
+	if err != nil {
+		return err
+	}
+	j.JobSchedule = schedule
 	return nil
 }
 
@@ -432,8 +479,16 @@ type oneTimeJobDefinition struct {
 	startAt OneTimeJobStartAtOption
 }
 
-func (o oneTimeJobDefinition) setup(j *internalJob, _ *time.Location) error {
-	j.jobSchedule = oneTimeJob{}
+func (o oneTimeJobDefinition) InitSchedule(_ *time.Location) (JobSchedule, error) {
+	return oneTimeJob{}, nil
+}
+
+func (o oneTimeJobDefinition) setup(j *internalJob, location *time.Location) error {
+	schedule, err := o.InitSchedule(location)
+	if err != nil {
+		return err
+	}
+	j.JobSchedule = schedule
 	return o.startAt(j)
 }
 
@@ -621,50 +676,50 @@ func BeforeJobRuns(eventListenerFunc func(jobID uuid.UUID, jobName string)) Even
 // -----------------------------------------------
 // -----------------------------------------------
 
-type jobSchedule interface {
-	next(lastRun time.Time) time.Time
+type JobSchedule interface {
+	Next(lastRun time.Time) time.Time
 }
 
-var _ jobSchedule = (*cronJob)(nil)
+var _ JobSchedule = (*cronJob)(nil)
 
 type cronJob struct {
 	cronSchedule cron.Schedule
 }
 
-func (j *cronJob) next(lastRun time.Time) time.Time {
+func (j *cronJob) Next(lastRun time.Time) time.Time {
 	return j.cronSchedule.Next(lastRun)
 }
 
-var _ jobSchedule = (*durationJob)(nil)
+var _ JobSchedule = (*durationJob)(nil)
 
 type durationJob struct {
 	duration time.Duration
 }
 
-func (j *durationJob) next(lastRun time.Time) time.Time {
+func (j *durationJob) Next(lastRun time.Time) time.Time {
 	return lastRun.Add(j.duration)
 }
 
-var _ jobSchedule = (*durationRandomJob)(nil)
+var _ JobSchedule = (*durationRandomJob)(nil)
 
 type durationRandomJob struct {
 	min, max time.Duration
 	rand     *rand.Rand
 }
 
-func (j *durationRandomJob) next(lastRun time.Time) time.Time {
+func (j *durationRandomJob) Next(lastRun time.Time) time.Time {
 	r := j.rand.Int63n(int64(j.max - j.min))
 	return lastRun.Add(j.min + time.Duration(r))
 }
 
-var _ jobSchedule = (*dailyJob)(nil)
+var _ JobSchedule = (*dailyJob)(nil)
 
 type dailyJob struct {
 	interval uint
 	atTimes  []time.Time
 }
 
-func (d dailyJob) next(lastRun time.Time) time.Time {
+func (d dailyJob) Next(lastRun time.Time) time.Time {
 	firstPass := true
 	next := d.nextDay(lastRun, firstPass)
 	if !next.IsZero() {
@@ -696,7 +751,7 @@ func (d dailyJob) nextDay(lastRun time.Time, firstPass bool) time.Time {
 	return time.Time{}
 }
 
-var _ jobSchedule = (*weeklyJob)(nil)
+var _ JobSchedule = (*weeklyJob)(nil)
 
 type weeklyJob struct {
 	interval   uint
@@ -704,7 +759,7 @@ type weeklyJob struct {
 	atTimes    []time.Time
 }
 
-func (w weeklyJob) next(lastRun time.Time) time.Time {
+func (w weeklyJob) Next(lastRun time.Time) time.Time {
 	firstPass := true
 	next := w.nextWeekDayAtTime(lastRun, firstPass)
 	if !next.IsZero() {
@@ -744,7 +799,7 @@ func (w weeklyJob) nextWeekDayAtTime(lastRun time.Time, firstPass bool) time.Tim
 	return time.Time{}
 }
 
-var _ jobSchedule = (*monthlyJob)(nil)
+var _ JobSchedule = (*monthlyJob)(nil)
 
 type monthlyJob struct {
 	interval    uint
@@ -753,7 +808,7 @@ type monthlyJob struct {
 	atTimes     []time.Time
 }
 
-func (m monthlyJob) next(lastRun time.Time) time.Time {
+func (m monthlyJob) Next(lastRun time.Time) time.Time {
 	daysList := make([]int, len(m.days))
 	copy(daysList, m.days)
 	firstDayNextMonth := time.Date(lastRun.Year(), lastRun.Month()+1, 1, 0, 0, 0, 0, lastRun.Location())
@@ -814,11 +869,11 @@ func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass 
 	return time.Time{}
 }
 
-var _ jobSchedule = (*oneTimeJob)(nil)
+var _ JobSchedule = (*oneTimeJob)(nil)
 
 type oneTimeJob struct{}
 
-func (o oneTimeJob) next(_ time.Time) time.Time {
+func (o oneTimeJob) Next(_ time.Time) time.Time {
 	return time.Time{}
 }
 
