@@ -875,6 +875,25 @@ type monthlyJob struct {
 }
 
 func (m monthlyJob) Next(lastRun time.Time) time.Time {
+	daysList := m.computeDaysListOfTheMonth(lastRun)
+	firstPass := true
+	next := m.nextMonthDayAtTime(lastRun, daysList, firstPass)
+	if !next.IsZero() {
+		return next.Add(m.delay)
+	}
+	firstPass = false
+
+	from := time.Date(lastRun.Year(), lastRun.Month()+time.Month(m.interval), 1, 0, 0, 0, 0, lastRun.Location())
+	daysList = m.computeDaysListOfTheMonth(from)
+	for next.IsZero() {
+		next = m.nextMonthDayAtTime(from, daysList, firstPass)
+		from = from.AddDate(0, int(m.interval), 0)
+	}
+
+	return next.Add(m.delay)
+}
+
+func (m monthlyJob) computeDaysListOfTheMonth(lastRun time.Time) []int {
 	daysList := make([]int, len(m.days))
 	copy(daysList, m.days)
 	firstDayNextMonth := time.Date(lastRun.Year(), lastRun.Month()+1, 1, 0, 0, 0, 0, lastRun.Location())
@@ -886,21 +905,7 @@ func (m monthlyJob) Next(lastRun time.Time) time.Time {
 		daysList = append(daysList, day)
 	}
 	slices.Sort(daysList)
-
-	firstPass := true
-	next := m.nextMonthDayAtTime(lastRun, daysList, firstPass)
-	if !next.IsZero() {
-		return next.Add(m.delay)
-	}
-	firstPass = false
-
-	from := time.Date(lastRun.Year(), lastRun.Month()+time.Month(m.interval), 1, 0, 0, 0, 0, lastRun.Location())
-	for next.IsZero() {
-		next = m.nextMonthDayAtTime(from, daysList, firstPass)
-		from = from.AddDate(0, int(m.interval), 0)
-	}
-
-	return next.Add(m.delay)
+	return daysList
 }
 
 func (m monthlyJob) nextMonthDayAtTime(lastRun time.Time, days []int, firstPass bool) time.Time {
