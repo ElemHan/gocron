@@ -364,6 +364,10 @@ func (s *scheduler) selectNewJob(j internalJob) {
 				next = j.Next(s.now())
 			}
 
+			for next.Before(s.now()) {
+				next = j.Next(next)
+			}
+
 			id := j.id
 			j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
 				select {

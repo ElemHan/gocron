@@ -666,7 +666,7 @@ func WithStartImmediately() StartAtOption {
 // This datetime must be in the future.
 func WithStartDateTime(start time.Time) StartAtOption {
 	return func(j *internalJob) error {
-		if start.IsZero() || start.Before(time.Now()) {
+		if start.IsZero() {
 			return ErrWithStartDateTimePast
 		}
 		j.startTime = start
