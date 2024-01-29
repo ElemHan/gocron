@@ -26,6 +26,7 @@ type internalJob struct {
 	JobSchedule
 	lastRun, nextRun   time.Time
 	delay              time.Duration
+	runWithRandomTime  bool
 	function           any
 	parameters         []any
 	timer              clockwork.Timer
@@ -591,6 +592,14 @@ func OneTimeJob(startAt OneTimeJobStartAtOption) JobDefinition {
 
 // JobOption defines the constructor for job options.
 type JobOption func(*internalJob) error
+
+// RunWithRandomTime ...
+func RunWithRandomTime(b bool) JobOption {
+	return func(j *internalJob) error {
+		j.runWithRandomTime = b
+		return nil
+	}
+}
 
 // WithEventListeners sets the event listeners that should be
 // run for the job.

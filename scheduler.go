@@ -3,6 +3,7 @@ package gocron
 
 import (
 	"context"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"time"
@@ -320,6 +321,11 @@ func (s *scheduler) selectExecJobIDsOut(id uuid.UUID) {
 		}
 	}
 	j.nextRun = next
+	if j.runWithRandomTime {
+		// run job with random time in Millisecond
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		next = next.Add(time.Millisecond * time.Duration(r.Intn(1000)))
+	}
 	j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
 		// set the actual timer on the job here and listen for
 		// shut down events so that the job doesn't attempt to
