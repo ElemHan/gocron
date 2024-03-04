@@ -373,9 +373,14 @@ func (s *scheduler) selectNewJob(j internalJob) {
 			for next.Before(s.now()) {
 				next = j.Next(next)
 			}
-
+			nextRunTime := next
+			if j.runWithRandomTime {
+				// run job with random time in Millisecond
+				r := rand.New(rand.NewSource(time.Now().UnixNano()))
+				nextRunTime = next.Add(time.Millisecond * time.Duration(r.Intn(1000)))
+			}
 			id := j.id
-			j.timer = s.clock.AfterFunc(next.Sub(s.now()), func() {
+			j.timer = s.clock.AfterFunc(nextRunTime.Sub(s.now()), func() {
 				select {
 				case <-s.shutdownCtx.Done():
 				case s.exec.jobsIn <- jobIn{
